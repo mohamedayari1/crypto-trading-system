@@ -10,3 +10,4 @@ if not Path(DATA_DIR).exists():
 
 if not Path(MODELS_DIR).exists():
     os.mkdir(MODELS_DIR)
+    
