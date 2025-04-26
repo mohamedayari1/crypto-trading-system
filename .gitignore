@@ -1,0 +1,13 @@
+/ETL/
+/feature/
+/feature_pipeline/data/
+
+
+# Exclude Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Exclude uv.lock files
+uv.lock
+.env
