@@ -2,25 +2,22 @@ import logging
 from typing import Optional
 from pathlib import Path
 from datetime import datetime, timedelta
-
 import pandas as pd
 import requests
 import hopsworks
 import fire
-
 from paths import DATA_DIR
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('dataset_generation')
 
-# List of important cryptocurrencies (can be extended as needed)
+# List of important cryptocurrencies
 IMPORTANT_CRYPTOCURRENCIES = ["BTC-USD", "ETH-USD", "ADA-USD", "XRP-USD", "LTC-USD"]
 
+# Feature Store settings
 FS_API_KEY = "Pg6hKTom6MjSnbNF.VBmTgApGW1pB8bCTK0MPGoixrydLJ9V92nrOjC4wAsfGnnu8ZOC7fFR3iUJL2qQQ"
 FS_PROJECT_NAME = "crypto_trading_system"
-
-
 
 def download_ohlc_data_from_coinbase(
     product_ids: Optional[list] = IMPORTANT_CRYPTOCURRENCIES,
@@ -36,108 +33,89 @@ def download_ohlc_data_from_coinbase(
     if to_day is None:
         to_day = datetime.now().strftime("%Y-%m-%d")
 
-    # create list of days as strings
+    # Create list of days as strings
     logger.info(f"Generating list of days from {from_day} to {to_day}")
-    days = pd.date_range(start=from_day, end=to_day, freq="1D")
-    days = [day.strftime("%Y-%m-%d") for day in days]
+    days = pd.date_range(start=from_day, end=to_day, freq="1D").strftime("%Y-%m-%d")
 
-    # create empty dataframe
+    # Create empty dataframe to hold all data
     data = pd.DataFrame()
 
-    # create download dir folder if it doesn't exist
-    if not (DATA_DIR / 'downloads').exists():
-        logger.info('Creating directory for downloads')
-        (DATA_DIR / 'downloads').mkdir(parents=True)
+    # Create download dir folder if it doesn't exist
+    download_dir = DATA_DIR / 'downloads'
+    download_dir.mkdir(parents=True, exist_ok=True)
 
     for product_id in product_ids:
         for day in days:
-            # download file if it doesn't exist
-            file_name = DATA_DIR / 'downloads' / f'{product_id}_{day}.csv'
-            if file_name.exists():
-                logger.info(f'File {file_name} already exists, skipping download')
-                data_one_day = pd.read_csv(file_name)
-            else:
-                logger.info(f'Downloading data for {product_id} on {day}')
-                data_one_day = download_data_for_one_day(product_id, day)
-                data_one_day.to_csv(file_name, index=False)
+            file_name = download_dir / f'{product_id}_{day}.csv'
+            if not file_name.exists():
+                logger.info(f"Downloading data for {product_id} on {day}")
+                day_data = download_data_for_one_day(product_id, day)
+                day_data.to_csv(file_name, index=False)
                 logger.info(f"Data for {day} saved to {file_name}")
+            else:
+                logger.info(f'File {file_name} already exists, skipping download')
+                day_data = pd.read_csv(file_name)
 
-            # combine today's file with the rest of the data
-            data = pd.concat([data, data_one_day])
+            data = pd.concat([data, day_data])
 
-    # save data to disk as CSV
+    # Save data to CSV
     output_file = DATA_DIR / "ohlc_data_last_7_days.csv"
     data.to_csv(output_file, index=False)
     logger.info(f"All data saved to {output_file}")
 
     # Load data to feature store
     load_data_to_feature_store(data)
-    
-    return output_file
 
+    return output_file
 def download_data_for_one_day(product_id: str, day: str) -> pd.DataFrame:
     """
-    Downloads one day of data and returns pandas DataFrame
+    Downloads one day of OHLC data from Coinbase and returns a pandas DataFrame.
     """
-    # create start and end date strings
     start = f'{day}T00:00:00'
-    end = (datetime.strptime(day, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-    end = f'{end}T00:00:00'
-
-    # call API
-    URL = f'https://api.exchange.coinbase.com/products/{product_id}/candles?start={start}&end={end}&granularity=3600'
+    end = (datetime.strptime(day, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d") + 'T00:00:00'
+    url = f'https://api.exchange.coinbase.com/products/{product_id}/candles?start={start}&end={end}&granularity=3600'
+    
     logger.info(f"Requesting data from Coinbase API for {product_id} on {day}")
-    r = requests.get(URL)
+    r = requests.get(url)
     data = r.json()
 
-    # transform list of lists to pandas dataframe and return
-    return pd.DataFrame(data, columns=['time', 'low', 'high', 'open', 'close', 'volume'])
-
-def load_data_to_feature_store(data: pd.DataFrame):
-    """
-    Loads the OHLC data into the Hopsworks Feature Store
-    """
-    # Connect to Hopsworks
-    project = hopsworks.login(api_key_value=FS_API_KEY, project=FS_PROJECT_NAME)
+    df = pd.DataFrame(data, columns=['time', 'low', 'high', 'open', 'close', 'volume'])
+    df['symbol'] = product_id  # Add the symbol column
     
-    try:
-        # Get feature store
-        feature_store = project.get_feature_store()
-        
-        # Add product_id column before preparing data
-        data['product_id'] = data.apply(lambda x: x.name[0] if isinstance(x.name, tuple) else 'Unknown', axis=1)
-        
-        # Prepare data for feature store
-        data['timestamp'] = pd.to_datetime(data['time'], unit='s')
-        data['symbol'] = data['product_id'].str.split('-').str[0]  # Get the currency symbol (e.g., 'BTC')
-        
-        # Drop unnecessary columns and reorder
-        data = data.drop(columns=['time', 'product_id'])
-        data = data[['symbol', 'timestamp', 'open', 'high', 'low', 'close', 'volume']]
-        
-        # Define feature group schema
-        feature_group = feature_store.get_or_create_feature_group(
-            name="ohlc_data",
-            version=1,
-            description="OHLC data for cryptocurrencies",
-            primary_key=["symbol"],  # Remove timestamp from primary key
-            online_enabled=True,
-            event_time='timestamp',
-            statistics_config={
-                "enabled": True,
-                "correlations": True,
-                "histograms": True
-            }
-        )
+    return df
 
-        # Load data into feature store
+def load_data_to_feature_store(data: pd.DataFrame) -> None:
+    """Loads OHLC data into the Hopsworks Feature Store and creates a Feature View."""
+    project = hopsworks.login(api_key_value=FS_API_KEY, project=FS_PROJECT_NAME)
+    fs = project.get_feature_store()
+
+    try:
+        # Prepare data
+        data['timestamp'] = pd.to_datetime(data['time'], unit='s')
+        data = data[['timestamp', 'symbol', 'open', 'high', 'low', 'close', 'volume']]  # Include 'symbol'
+
+        # Insert data into the feature store
+        feature_group = fs.get_feature_group("ohlc_data")
         feature_group.insert(data, write_options={"wait_for_job": True})
-        
+
         logger.info("Data successfully loaded to feature store!")
-        
+
+        # Create Feature View if not exists
+        try:
+            fs.get_feature_view(name="ohlc_data_view", version=1)
+            logger.info("Feature view already exists.")
+        except:
+            query = feature_group.select_all()
+            feature_view = fs.create_feature_view(
+                name="ohlc_data_view",
+                description="OHLC data for cryptocurrencies",
+                query=query,
+                labels=[]
+            )
+            logger.info("Feature view created successfully.")
     except Exception as e:
         logger.error(f"Error loading data to feature store: {str(e)}")
-        raise
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     fire.Fire(download_ohlc_data_from_coinbase)
