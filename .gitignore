@@ -11,3 +11,6 @@ __pycache__/
 # Exclude uv.lock files
 uv.lock
 .env
+
+
+/training_pipeline/wandb
