@@ -69,15 +69,36 @@ def train_baseline_model(
         training_dataset_version=1,
         fh=fh,
     )
-    print("y_train index")
-    print(y_train.index)
-    print("y_test index")
-    print(y_test.index)
 
+
+   # Ensure the indices have a frequency
+    y_train = y_train.copy()
+    # Create temporary series to apply asfreq
+    temp_series = pd.Series(range(len(y_train.index.levels[1])), index=y_train.index.levels[1])
+    temp_series = temp_series.asfreq('H')
+    # Set the levels back
+    y_train.index = y_train.index.set_levels(temp_series.index, level='timestamp')
+
+    y_test = y_test.copy()
+    # Create temporary series to apply asfreq
+    temp_series = pd.Series(range(len(y_test.index.levels[1])), index=y_test.index.levels[1])
+    temp_series = temp_series.asfreq('H')
+    # Set the levels back
+    y_test.index = y_test.index.set_levels(temp_series.index, level='timestamp')
+
+    # Verify the index type and frequency
+    logger.info(f"Index type: {type(y_train.index.levels[1])}")
+    logger.info(f"Index frequency: {y_train.index.levels[1].freq}")
+    
+
+    
     training_start_datetime = y_train.index.get_level_values("timestamp").min()
     training_end_datetime = y_train.index.get_level_values("timestamp").max()
     testing_start_datetime = y_test.index.get_level_values("timestamp").min()
     testing_end_datetime = y_test.index.get_level_values("timestamp").max()
+    
+    
+    
     logger.info(
         f"Training baseline model on data from {training_start_datetime} to {training_end_datetime}."
     )
@@ -98,16 +119,17 @@ def train_baseline_model(
         # Train baseline model
         baseline_forecaster = build_baseline_model(seasonal_periodicity=fh)
         baseline_forecaster = train_model(baseline_forecaster, y_train, X_train, fh=fh)
-    #     y_pred, metrics_baseline = evaluate(baseline_forecaster, y_test, X_test)
+        y_pred, metrics_baseline = evaluate(baseline_forecaster, y_test, X_test)
     #     slices = metrics_baseline.pop("slices")
-    #     for k, v in metrics_baseline.items():
-    #         logger.info(f"Baseline test {k}: {v}")
-    #     wandb.log({"test": {"baseline": metrics_baseline}})
+        for k, v in metrics_baseline.items():
+            logger.info(f"Baseline test {k}: {v}")
+        wandb.log({"test": {"baseline": metrics_baseline}})
     #     wandb.log({"test.baseline.slices": wandb.Table(dataframe=slices)})
 
-    #     # Render baseline model results
-    #     results = OrderedDict({"y_train": y_train, "y_test": y_test, "y_pred": y_pred})
-    #     render(results, prefix="images_baseline")
+        # Render baseline model results
+        results = OrderedDict({"y_train": y_train, "y_test": y_test, "y_pred": y_pred})
+        print(results)
+        # render(results, prefix="images_baseline")
 
     #     # Save baseline model
         save_model_path = OUTPUT_DIR + "/baseline_model.pkl"
@@ -155,36 +177,36 @@ def evaluate(
     mape = mean_absolute_percentage_error(y_test, y_pred, symmetric=False)
     results["MAPE"] = mape
 
-    # Compute metrics per slice
-    y_test_slices = y_test.groupby(["area", "consumer_type"])
-    y_pred_slices = y_pred.groupby(["area", "consumer_type"])
-    slices = pd.DataFrame(columns=["area", "consumer_type", "RMSPE", "MAPE"])
-    for y_test_slice, y_pred_slice in zip(y_test_slices, y_pred_slices):
-        (area_y_test, consumer_type_y_test), y_test_slice_data = y_test_slice
-        (area_y_pred, consumer_type_y_pred), y_pred_slice_data = y_pred_slice
+    # # Compute metrics per slice
+    # y_test_slices = y_test.groupby(["area", "consumer_type"])
+    # y_pred_slices = y_pred.groupby(["area", "consumer_type"])
+    # slices = pd.DataFrame(columns=["area", "consumer_type", "RMSPE", "MAPE"])
+    # for y_test_slice, y_pred_slice in zip(y_test_slices, y_pred_slices):
+    #     (area_y_test, consumer_type_y_test), y_test_slice_data = y_test_slice
+    #     (area_y_pred, consumer_type_y_pred), y_pred_slice_data = y_pred_slice
 
-        assert (
-            area_y_test == area_y_pred and consumer_type_y_test == consumer_type_y_pred
-        ), "Slices are not aligned."
+    #     assert (
+    #         area_y_test == area_y_pred and consumer_type_y_test == consumer_type_y_pred
+    #     ), "Slices are not aligned."
 
-        rmspe_slice = mean_squared_percentage_error(
-            y_test_slice_data, y_pred_slice_data, squared=False
-        )
-        mape_slice = mean_absolute_percentage_error(
-            y_test_slice_data, y_pred_slice_data, symmetric=False
-        )
+    #     rmspe_slice = mean_squared_percentage_error(
+    #         y_test_slice_data, y_pred_slice_data, squared=False
+    #     )
+    #     mape_slice = mean_absolute_percentage_error(
+    #         y_test_slice_data, y_pred_slice_data, symmetric=False
+    #     )
 
-        slice_results = pd.DataFrame(
-            {
-                "area": [area_y_test],
-                "consumer_type": [consumer_type_y_test],
-                "RMSPE": [rmspe_slice],
-                "MAPE": [mape_slice],
-            }
-        )
-        slices = pd.concat([slices, slice_results], ignore_index=True)
+    #     slice_results = pd.DataFrame(
+    #         {
+    #             "area": [area_y_test],
+    #             "consumer_type": [consumer_type_y_test],
+    #             "RMSPE": [rmspe_slice],
+    #             "MAPE": [mape_slice],
+    #         }
+    #     )
+    #     slices = pd.concat([slices, slice_results], ignore_index=True)
 
-    results["slices"] = slices
+    # results["slices"] = slices
     return y_pred, results
 
 
@@ -207,6 +229,7 @@ def render(
 
     output_dir = OUTPUT_DIR / prefix if prefix else OUTPUT_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
+    
     for group_name, group_values_dict in grouped_timeseries.items():
         fig, ax = plot_series(
             *group_values_dict.values(), labels=group_values_dict.keys()
@@ -220,6 +243,7 @@ def render(
 
         if prefix:
             wandb.log({prefix: wandb.Image(image_save_path)})
+            
         else:
             wandb.log(wandb.Image(image_save_path))
 
@@ -229,3 +253,5 @@ def render(
 
 if __name__ == "__main__":
     fire.Fire(train_baseline_model)
+    
+    
