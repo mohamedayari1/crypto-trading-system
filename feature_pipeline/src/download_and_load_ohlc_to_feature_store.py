@@ -8,6 +8,20 @@ import hopsworks
 import fire
 from paths import DATA_DIR
 
+
+from datetime import datetime, timedelta
+
+# Hardcoded dates
+end_datetime = datetime(2025, 4, 26)  # April 26, 2025
+start_datetime = end_datetime - timedelta(days=7)  # Seven days ago, April 19, 2025
+
+# Specify the datetime format
+datetime_format = "%Y-%m-%dT%H:%M"
+
+# Convert start_datetime and end_datetime to the specified format
+start_time_str = start_datetime.strftime(datetime_format)
+end_time_str = end_datetime.strftime(datetime_format)
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('dataset_generation')
@@ -100,19 +114,45 @@ def load_data_to_feature_store(data: pd.DataFrame) -> None:
 
         logger.info("Data successfully loaded to feature store!")
 
+
+
+        feature_view = None
+        
         # Create Feature View if not exists
         try:
-            fs.get_feature_view(name="ohlc_data_view", version=1)
+            feature_view = fs.get_feature_view(name="ohlc_data_prototype_view", version=1)
             logger.info("Feature view already exists.")
         except:
             query = feature_group.select_all()
             feature_view = fs.create_feature_view(
-                name="ohlc_data_view",
+                name="ohlc_data_prototype_view",
                 description="OHLC data for cryptocurrencies",
                 query=query,
                 labels=[]
             )
-            logger.info("Feature view created successfully.")
+
+        # Create training dataset.
+        logger.info(
+            f"Creating training dataset between {start_datetime} and {end_datetime}."
+        )
+        feature_view.create_training_data(
+            description="OHLC training dataset",
+            data_format="csv",
+            # start_time=start_datetime,
+            # end_time=end_datetime,
+            write_options={"wait_for_job": True},
+            coalesce=False,
+        )
+
+        # Save metadata.
+        metadata = {
+            "feature_view_version": feature_view.version,
+            "training_dataset_version": 1,
+        }
+            
+            
+            
+            
     except Exception as e:
         logger.error(f"Error loading data to feature store: {str(e)}")
 
