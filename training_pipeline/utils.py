@@ -7,11 +7,13 @@ import wandb
 from pathlib import Path
 from typing import Union, Optional
 
+# Hardcoded constants
+WANDB_API_KEY = "2aebcfef432ed4e4bd33b7f9532cdb0bbf86586b"
+WANDB_ENTITY = "ayarim781-sup-com"
+WANDB_PROJECT = "crypto_trading_system"
 
-from training_pipeline import settings
 
-
-def save_json(data: dict, file_name: str, save_dir: str = settings.OUTPUT_DIR):
+def save_json(data: dict, file_name: str, save_dir: str = "outputs"):
     """
     Save a dictionary as a JSON file.
 
@@ -23,12 +25,14 @@ def save_json(data: dict, file_name: str, save_dir: str = settings.OUTPUT_DIR):
     Returns: None
     """
 
-    data_path = Path(save_dir) / file_name
-    with open(data_path, "w") as f:
+    data_path = Path(save_dir)
+    data_path.mkdir(parents=True, exist_ok=True)  # Create directory if it doesn't exist
+    file_path = data_path / file_name
+    with open(file_path, "w") as f:
         json.dump(data, f)
 
 
-def load_json(file_name: str, save_dir: str = settings.OUTPUT_DIR) -> dict:
+def load_json(file_name: str, save_dir: str = "outputs") -> dict:
     """
     Load a JSON file.
 
@@ -106,8 +110,8 @@ def init_wandb_run(
     run_id: Optional[str] = None,
     resume: Optional[str] = None,
     reinit: bool = False,
-    project: str = settings.SETTINGS["WANDB_PROJECT"],
-    entity: str = settings.SETTINGS["WANDB_ENTITY"],
+    project: str = WANDB_PROJECT,
+    entity: str = WANDB_ENTITY,
 ):
     """Wrapper over the wandb.init function."""
 
@@ -130,10 +134,10 @@ def init_wandb_run(
 
 def check_if_artifact_exists(
     artifact_name: str,
-    project: str = settings.SETTINGS["WANDB_PROJECT"],
-    entity: str = settings.SETTINGS["WANDB_ENTITY"],
+    project: str = WANDB_PROJECT,
+    entity: str = WANDB_ENTITY,
 ) -> bool:
-    """Utiliy function that checks if a W&B artifact exists."""
+    """Utility function that checks if a W&B artifact exists."""
 
     try:
         get_artifact(artifact_name, project, entity)
@@ -145,8 +149,8 @@ def check_if_artifact_exists(
 
 def get_artifact(
     artifact_name: str,
-    project: str = settings.SETTINGS["WANDB_PROJECT"],
-    entity: str = settings.SETTINGS["WANDB_ENTITY"],
+    project: str = WANDB_PROJECT,
+    entity: str = WANDB_ENTITY,
 ) -> wandb.Artifact:
     """Get the latest version of a W&B artifact."""
 

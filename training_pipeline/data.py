@@ -67,8 +67,8 @@ def load_dataset_from_feature_store(
         )
 
         # Log first 5 rows of the data in the terminal
-        print("First 5 rows of the data:")
-        print(data.head())
+        # print("First 5 rows of the data:")
+        # print(data.head())
 
         fv_metadata = feature_view.to_dict()
         fv_metadata["query"] = fv_metadata["query"].to_string()

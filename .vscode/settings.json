@@ -1,2 +1,5 @@
 {
-}
+    "terminal.integrated.env.linux": {
+      "PYTHONPATH": "/home/mohamed-ayari/projects/mohamed/crypto-trading-system"
+    }
+  }
