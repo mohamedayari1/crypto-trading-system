@@ -16,3 +16,4 @@ uv.lock
 /training_pipeline/wandb
 
 training_pipeline/output
+/notebooks/

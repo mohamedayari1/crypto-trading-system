@@ -1,0 +1,12 @@
+[project]
+name = "batch-prediction-pipeline"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fire>=0.7.0",
+    "hopsworks>=4.2.2",
+    "lightgbm>=4.6.0",
+    "sktime>=0.37.0",
+]

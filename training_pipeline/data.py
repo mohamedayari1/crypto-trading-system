@@ -46,7 +46,7 @@ def init_wandb_run(
 
 def load_dataset_from_feature_store(
     feature_view_version: int = 1, 
-    training_dataset_version: int = 1, 
+    training_dataset_version: int = 2, 
     fh: int = 24
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     
@@ -84,9 +84,11 @@ def load_dataset_from_feature_store(
             type="feature_view",
             metadata=fv_metadata,
         )
+        
         run.log_artifact(raw_data_at)
 
         run.finish()
+
 
     with init_wandb_run(
         name="train_test_split", job_type="prepare_dataset", group="dataset"

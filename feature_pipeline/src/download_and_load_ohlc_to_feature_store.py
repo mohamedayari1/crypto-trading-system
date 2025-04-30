@@ -81,6 +81,13 @@ def download_ohlc_data_from_coinbase(
     load_data_to_feature_store(data)
 
     return output_file
+
+
+
+
+
+
+
 def download_data_for_one_day(product_id: str, day: str) -> pd.DataFrame:
     """
     Downloads one day of OHLC data from Coinbase and returns a pandas DataFrame.
@@ -97,6 +104,9 @@ def download_data_for_one_day(product_id: str, day: str) -> pd.DataFrame:
     df['symbol'] = product_id  # Add the symbol column
     
     return df
+
+
+
 
 def load_data_to_feature_store(data: pd.DataFrame) -> None:
     """Loads OHLC data into the Hopsworks Feature Store and creates a Feature View."""
@@ -135,6 +145,7 @@ def load_data_to_feature_store(data: pd.DataFrame) -> None:
         logger.info(
             f"Creating training dataset between {start_datetime} and {end_datetime}."
         )
+        
         feature_view.create_training_data(
             description="OHLC training dataset",
             data_format="csv",
